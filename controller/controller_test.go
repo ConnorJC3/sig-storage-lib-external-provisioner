@@ -729,7 +729,7 @@ func TestController(t *testing.T) {
 			},
 		},
 		{
-			name: "volume deletion succeeds but the pv deletion fails, the pv still exists",
+			name: "volume deletion succeeds but the pv deletion fails, finalizer is removed but the pv is not deleted",
 			objs: []runtime.Object{
 				newVolume("volume-1", v1.VolumeReleased, v1.PersistentVolumeReclaimDelete, map[string]string{annDynamicallyProvisioned: "foo.bar/baz"}, []string{finalizerPV}, nil),
 			},
@@ -737,6 +737,27 @@ func TestController(t *testing.T) {
 			provisionerName: "foo.bar/baz",
 			provisioner:     newTestProvisioner(),
 			verbs:           []string{"delete"},
+			reaction: func(action testclient.Action) (handled bool, ret runtime.Object, err error) {
+				return true, nil, errors.New("fake error")
+			},
+			expectedVolumes: []v1.PersistentVolume{
+				*newVolume("volume-1", v1.VolumeReleased, v1.PersistentVolumeReclaimDelete, map[string]string{annDynamicallyProvisioned: "foo.bar/baz"}, nil, nil),
+			},
+			expectedMetrics: testMetrics{
+				deleted: counts{
+					"": count{failed: 1},
+				},
+			},
+		},
+		{
+			name: "volume deletion succeeds but the finalizer removal fails, finalizer is not removed and the pv is not deleted",
+			objs: []runtime.Object{
+				newVolume("volume-1", v1.VolumeReleased, v1.PersistentVolumeReclaimDelete, map[string]string{annDynamicallyProvisioned: "foo.bar/baz"}, []string{finalizerPV}, nil),
+			},
+			addFinalizer:    true,
+			provisionerName: "foo.bar/baz",
+			provisioner:     newTestProvisioner(),
+			verbs:           []string{"patch"},
 			reaction: func(action testclient.Action) (handled bool, ret runtime.Object, err error) {
 				return true, nil, errors.New("fake error")
 			},

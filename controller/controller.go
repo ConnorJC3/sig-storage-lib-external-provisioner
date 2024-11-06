@@ -1561,36 +1561,14 @@ func (ctrl *ProvisionController) deleteVolumeOperation(ctx context.Context, volu
 
 	logger.V(4).Info("Volume deleted")
 
-	// Delete the volume
-	if err = ctrl.client.CoreV1().PersistentVolumes().Delete(ctx, volume.Name, metav1.DeleteOptions{}); err != nil {
-		// Oops, could not delete the volume and therefore the controller will
-		// try to delete the volume again on next update.
-		logger.Info("Failed to delete persistentvolume", "err", err)
-		return err
-	}
-
 	if ctrl.addFinalizer {
 		if len(volume.ObjectMeta.Finalizers) > 0 {
 			// Remove external-provisioner finalizer
 
-			// need to get the pv again because the delete has updated the object with a deletion timestamp
-			volumeObj, exists, err := ctrl.volumes.GetByKey(volume.Name)
-			if err != nil {
-				logger.Info("Failed to get persistentvolume to update finalizer", "err", err)
-				return err
-			}
-			if !exists {
-				// If the volume is not found return
-				return nil
-			}
-			newVolume, ok := volumeObj.(*v1.PersistentVolume)
-			if !ok {
-				return fmt.Errorf("expected volume but got %+v", volumeObj)
-			}
-			finalizers, modified := removeFinalizer(newVolume.ObjectMeta.Finalizers, finalizerPV)
+			finalizers, modified := removeFinalizer(volume.ObjectMeta.Finalizers, finalizerPV)
 			// Only update the finalizers if we actually removed something
 			if modified {
-				if _, err = ctrl.patchPersistentVolumeWithFinalizers(ctx, newVolume, finalizers); err != nil {
+				if _, err = ctrl.patchPersistentVolumeWithFinalizers(ctx, volume, finalizers); err != nil {
 					if !apierrs.IsNotFound(err) {
 						// Couldn't remove finalizer and the object still exists, the controller may
 						// try to remove the finalizer again on the next update
@@ -1600,6 +1578,14 @@ func (ctrl *ProvisionController) deleteVolumeOperation(ctx context.Context, volu
 				}
 			}
 		}
+	}
+
+	// Delete the volume
+	if err = ctrl.client.CoreV1().PersistentVolumes().Delete(ctx, volume.Name, metav1.DeleteOptions{}); err != nil {
+		// Oops, could not delete the volume and therefore the controller will
+		// try to delete the volume again on next update.
+		logger.Info("Failed to delete persistentvolume", "err", err)
+		return err
 	}
 
 	logger.V(4).Info("PersistentVolume deleted succeeded")
