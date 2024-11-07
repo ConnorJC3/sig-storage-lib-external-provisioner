@@ -23,6 +23,7 @@ import (
 
 	"github.com/miekg/dns"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	klog "k8s.io/klog/v2"
@@ -161,4 +162,27 @@ func JoinHostPort(host, port string) (hostport string) {
 		return net.JoinHostPort(host, port)
 	}
 	return host
+}
+
+// ShouldEnqueuePersistentVolumeChange indicates whether or not a change to a PersistentVolume object
+// is a change that should be enqueued for sync.
+//
+// The following changes are sanitized (and thus, not considered for determining whether to sync)
+//   - Resource Version (always changed between objects)
+//   - Finalizers (updated during deletion, and will not change the sync status)
+//
+// If the PersistentVolume object still contains other changes after this sanitization, the changes
+// are potentially meaningful and the PV is enqueued to be considered for syncing.
+func ShouldEnqueuePersistentVolumeChange(old *v1.PersistentVolume, new *v1.PersistentVolume) bool {
+	sanitized := new.DeepCopy()
+	// ResourceVersion always changes between revisions
+	sanitized.ResourceVersion = old.ResourceVersion
+	// Finalizers should not cause in a sync
+	sanitized.Finalizers = old.Finalizers
+
+	if equality.Semantic.DeepEqual(old, sanitized) {
+		// The only changes are in the fields we don't care about, so don't enqueue for sync
+		return false
+	}
+	return true
 }

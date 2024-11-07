@@ -717,8 +717,12 @@ func NewProvisionController(
 	// PersistentVolumes
 
 	volumeHandler := cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { controller.enqueueVolume(obj) },
-		UpdateFunc: func(oldObj, newObj interface{}) { controller.enqueueVolume(newObj) },
+		AddFunc: func(obj interface{}) { controller.enqueueVolume(obj) },
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			if util.ShouldEnqueuePersistentVolumeChange(oldObj.(*v1.PersistentVolume), newObj.(*v1.PersistentVolume)) {
+				controller.enqueueVolume(newObj)
+			}
+		},
 		DeleteFunc: func(obj interface{}) { controller.forgetVolume(obj) },
 	}
 

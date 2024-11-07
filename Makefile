@@ -24,6 +24,7 @@ verify: dep
 test: dep
 	go test ./controller -v
 	go test ./allocator -v
+	go test ./util -v
 
 # Check contextual logging.
 .PHONY: logcheck
